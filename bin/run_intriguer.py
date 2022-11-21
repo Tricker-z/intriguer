@@ -25,8 +25,8 @@ def execute(cmd) :
 def check_binary(target_bin):
     stdout, stderr = execute('objdump -a ' + target_bin) 
 
-    arch = stdout.read()
-
+    arch = stdout.read().decode()
+    # print(arch)
     if arch.find('elf32') >= 0:
         return 32
     elif arch.find('elf64-x86-64') >= 0:

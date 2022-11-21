@@ -5336,9 +5336,7 @@ static u8 fuzz_one(char** argv) {
 
   char* fname = alloc_printf("%s", queue_cur->fname);
   char* field_name = alloc_printf("%s/field/%06u", out_dir, current_entry);
-
-  char template[] = "/tmp/tmpdir.XXXXXX";
-  char *temp_dir = mkdtemp(template);
+  u8 concolic_flag = 1;
 
   if(access(field_name, F_OK) == -1 && pending_not_fuzzed != 0) {
     if(pending_not_fuzzed == 0){
@@ -5354,6 +5352,9 @@ static u8 fuzz_one(char** argv) {
 
     intriguer_cmd = alloc_printf("%s", getenv("INTRIGUER_CMD"));
 
+    char template[] = "/tmp/tmpdir.XXXXXX";
+    char *temp_dir = mkdtemp(template);
+
     cmd = alloc_printf("python %s -s 1 -t %d -i %s -o %s -- %s > /dev/null 2> /dev/null",
         intriguer_path, intriguer_timeout, fname, temp_dir, intriguer_cmd);
 
@@ -5363,11 +5364,22 @@ static u8 fuzz_one(char** argv) {
     ck_free(intriguer_cmd);
     ck_free(cmd);
 
-    cmd = alloc_printf("cp %s/field.out %s", temp_dir, field_name);
+    // check the field file exists
+    struct stat st;
+    u8* field_fn = alloc_printf("%s/field.out", temp_dir);
 
-    // printf("cmd: %s\n", cmd);
-    system(cmd);
-    ck_free(cmd);
+    if (lstat(field_fn, &st) || access(field_fn, R_OK)) {
+      printf("Unable to access '%s'\n", field_fn);
+      concolic_flag = 0;
+    }
+
+    if (concolic_flag) {
+      cmd = alloc_printf("cp %s %s", field_fn, field_name);
+      // printf("cmd: %s\n", cmd);
+      system(cmd);
+      ck_free(cmd);
+    }
+    ck_free(field_fn);
 
     cmd = alloc_printf("rm -r %s", temp_dir);
 
@@ -5375,7 +5387,7 @@ static u8 fuzz_one(char** argv) {
     ck_free(cmd);
   }
 
-  if(queue_cur->fields == NULL)
+  if(queue_cur->fields == NULL && concolic_flag)
     queue_cur->fields = read_field_file(field_name, &(queue_cur->field_count));
 
   ck_free(field_name);
